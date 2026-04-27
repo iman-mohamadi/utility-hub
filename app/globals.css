@@ -121,20 +121,21 @@
     * {
         @apply border-border outline-ring/50;
     }
-    
+
     /* Apply font to body, not all elements */
     body {
         @apply bg-background text-foreground font-sans;
     }
 
-    button:not(:disabled), [role="button"]:not(:disabled) {
+    button:not(:disabled),
+    [role="button"]:not(:disabled) {
         cursor: pointer;
     }
 }
 
- * {
-        font-family: KalamehWebFaNum !important;
-    }
+* {
+    font-family: KalamehWebFaNum !important;
+}
 
 [dir="rtl"] {
     text-align: right;
