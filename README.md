@@ -1,21 +1,20 @@
-# Next.js template
+# Utility Hub (ابزارهای رایگان)
 
-This is a Next.js template with shadcn/ui.
+A comprehensive suite of free, online developer tools including a JSON Formatter, Text Sharing (Pastebin), and URL Shortener. Built with Next.js, TypeScript, and shadcn/ui.
 
-## Adding components
+## Features
+- **JSON Formatter**: Validate, minify, and format JSON with syntax highlighting.
+- **Text Sharing**: Quickly share code snippets or notes (Coming Soon).
+- **URL Shortener**: Create short links with custom aliases and QR codes (Coming Soon).
 
-To add components to your app, run the following command:
+## Tech Stack
+- **Framework**: Next.js 15+ (App Router)
+- **Styling**: Tailwind CSS 4.0
+- **Components**: shadcn/ui & Lucide Icons
+- **Theming**: next-themes (Dark/Light mode support)
 
+## Getting Started
+
+First, install the dependencies:
 ```bash
-npx shadcn@latest add button
-```
-
-This will place the ui components in the `components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
-```
+pnpm install
