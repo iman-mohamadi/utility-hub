@@ -161,10 +161,11 @@ export default function Home() {
           ].map((stat, idx) => (
             <motion.div
               key={idx}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.7 + idx * 0.1, duration: 0.4 }}
-              whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1, duration: 0.5 }}
+              viewport={{ once: true }}
+              whileHover={{ y: -8, transition: { duration: 0.2 } }}
               className="text-center p-4 rounded-2xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/20"
             >
               <stat.icon className="w-6 h-6 mx-auto mb-2 text-primary" />
@@ -203,9 +204,8 @@ export default function Home() {
                 whileHover={{ y: -8, transition: { duration: 0.2 } }}
               >
                 <Link href={feature.href}>
-                  <Card className={`group relative overflow-hidden p-6 h-full transition-all duration-300 hover:shadow-2xl cursor-pointer ${
-                    feature.status === "coming" ? "opacity-60 hover:opacity-80" : ""
-                  }`}>
+                  <Card className={`group relative overflow-hidden p-6 h-full transition-all duration-300 hover:shadow-2xl cursor-pointer ${feature.status === "coming" ? "opacity-60 hover:opacity-80" : ""
+                    }`}>
                     <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
 
                     <div className="relative">
@@ -253,10 +253,10 @@ export default function Home() {
           <p className="text-white/90 mb-6 max-w-md mx-auto">
             همین حالا شروع کنید و از ابزارهای رایگان ما استفاده کنید
           </p>
-          <Button asChild size="lg" variant="secondary" className="group">
+          <Button asChild size="lg" variant="secondary" className="group relative overflow-hidden">
             <Link href="/json-formatter">
               شروع رایگان
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 h-4 w-4 transition-transform group-hover:scale-90" />
             </Link>
           </Button>
         </motion.div>

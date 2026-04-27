@@ -135,6 +135,7 @@
 
 * {
     font-family: KalamehWebFaNum !important;
+    scroll-behavior: smooth;
 }
 
 [dir="rtl"] {
