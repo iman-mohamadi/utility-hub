@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function JsonFormatterPage() {
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <JsonFormatter />
     </div>
   )

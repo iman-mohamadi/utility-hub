@@ -2,13 +2,7 @@
 
 import { useState, useCallback } from "react"
 
-interface JsonStats {
-  inputSize: number
-  outputSize: number
-  compression: number
-  inputLines: number
-  outputLines: number
-}
+const LARGE_FILE_THRESHOLD = 100 * 1024 // 100KB - use backend for larger files
 
 export function useJsonFormatter() {
   const [input, setInput] = useState("")
@@ -17,67 +11,110 @@ export function useJsonFormatter() {
   const [isValid, setIsValid] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [mode, setMode] = useState<"beautify" | "minify">("beautify")
+  const [processingLocation, setProcessingLocation] = useState<"client" | "server">("client")
 
-  const calculateStats = useCallback(
-    (text: string): { size: number; lines: number } => {
-      const size = new Blob([text]).size
-      const lines = text.split("\n").length
-      return { size, lines }
-    },
-    []
-  )
+  // Process on frontend (fast, private)
+  const processOnClient = useCallback((jsonString: string, formatMode: "beautify" | "minify") => {
+    try {
+      const parsed = JSON.parse(jsonString)
+      const result = formatMode === "beautify" 
+        ? JSON.stringify(parsed, null, 2)
+        : JSON.stringify(parsed)
+      
+      setOutput(result)
+      setIsValid(true)
+      setProcessingLocation("client")
+      return { success: true, data: result }
+    } catch (err) {
+      throw err
+    }
+  }, [])
 
-  const beautify = useCallback(() => {
+  // Process on backend (for large files)
+  const processOnServer = useCallback(async (jsonString: string, formatMode: "beautify" | "minify") => {
+    try {
+      const response = await fetch("/api/format", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          json: jsonString,
+          mode: formatMode,
+          indent: 2
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Server processing failed")
+      }
+
+      setOutput(result.data)
+      setProcessingLocation("server")
+      return { success: true, data: result.data, metadata: result.metadata }
+    } catch (err) {
+      throw err
+    }
+  }, [])
+
+  // Smart processing: choose client or server based on size
+  const beautify = useCallback(async () => {
     if (!input.trim()) {
       setError("لطفاً JSON را وارد کنید")
-      return false
+      return
     }
 
     setIsLoading(true)
     setError("")
 
     try {
-      const parsed = JSON.parse(input)
-      const formatted = JSON.stringify(parsed, null, 2)
-      setOutput(formatted)
-      setIsValid(true)
+      const size = new Blob([input]).size
+      const useServer = size > LARGE_FILE_THRESHOLD
+
+      if (useServer) {
+        await processOnServer(input, "beautify")
+      } else {
+        processOnClient(input, "beautify")
+      }
+      
       setMode("beautify")
-      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : "JSON نامعتبر")
       setIsValid(false)
       setOutput("")
-      return false
     } finally {
       setIsLoading(false)
     }
-  }, [input])
+  }, [input, processOnClient, processOnServer])
 
-  const minify = useCallback(() => {
+  const minify = useCallback(async () => {
     if (!input.trim()) {
       setError("لطفاً JSON را وارد کنید")
-      return false
+      return
     }
 
     setIsLoading(true)
     setError("")
 
     try {
-      const parsed = JSON.parse(input)
-      const minified = JSON.stringify(parsed)
-      setOutput(minified)
-      setIsValid(true)
+      const size = new Blob([input]).size
+      const useServer = size > LARGE_FILE_THRESHOLD
+
+      if (useServer) {
+        await processOnServer(input, "minify")
+      } else {
+        processOnClient(input, "minify")
+      }
+      
       setMode("minify")
-      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : "JSON نامعتبر")
       setIsValid(false)
       setOutput("")
-      return false
     } finally {
       setIsLoading(false)
     }
-  }, [input])
+  }, [input, processOnClient, processOnServer])
 
   const clear = useCallback(() => {
     setInput("")
@@ -85,21 +122,6 @@ export function useJsonFormatter() {
     setError("")
     setIsValid(false)
   }, [])
-
-  const loadExample = useCallback(() => {
-    const example = {
-      name: "ابزارهای رایگان",
-      version: "1.0.0",
-      features: ["JSON Formatter", "Copy Paste", "URL Shortener"],
-      author: {
-        name: "Developer",
-        skills: ["React", "Next.js", "Node.js"],
-      },
-      createdAt: new Date().toISOString(),
-    }
-    setInput(JSON.stringify(example, null, 2))
-    setTimeout(() => beautify(), 100)
-  }, [beautify])
 
   const copyToClipboard = useCallback(async () => {
     if (!output) return false
@@ -122,19 +144,6 @@ export function useJsonFormatter() {
     URL.revokeObjectURL(url)
   }, [output, mode])
 
-  const stats = output
-    ? {
-        outputSize: calculateStats(output).size,
-        outputLines: calculateStats(output).lines,
-        compression: input
-          ? Math.round(
-              (1 - calculateStats(output).size / calculateStats(input).size) *
-                100
-            )
-          : 0,
-      }
-    : null
-
   return {
     input,
     setInput,
@@ -143,12 +152,11 @@ export function useJsonFormatter() {
     isValid,
     isLoading,
     mode,
-    stats,
+    processingLocation,
     beautify,
     minify,
     clear,
-    loadExample,
     copyToClipboard,
-    download,
+    download
   }
 }

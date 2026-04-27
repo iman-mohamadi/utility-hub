@@ -21,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className="font-[Vazirmatn] antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -30,7 +30,7 @@ export default function RootLayout({
         >
           <div className="flex min-h-screen flex-col">
             <Header />
-            <main className="container mx-auto flex-1 px-4 py-8">
+            <main className="">
               {children}
             </main>
             <Footer />
