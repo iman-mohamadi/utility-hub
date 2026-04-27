@@ -204,7 +204,7 @@ export default function Home() {
                 whileHover={{ y: -8, transition: { duration: 0.2 } }}
               >
                 <Link href={feature.href}>
-                  <Card className={`group relative overflow-hidden p-6 h-full transition-all duration-300 hover:shadow-2xl cursor-pointer ${feature.status === "coming" ? "opacity-60 hover:opacity-80" : ""
+                  <Card className={`group relative overflow-hidden p-6 h-full transition-all duration-300 hover:shadow-2xl cursor-pointer ${feature.status === "coming" ? "opacity-40 hover:opacity-60" : ""
                     }`}>
                     <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
 
