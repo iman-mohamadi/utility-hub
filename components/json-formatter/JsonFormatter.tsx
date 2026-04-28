@@ -2,143 +2,160 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  Sparkles, 
-  Zap, 
-  Trash2, 
-  Copy, 
-  Download, 
+import {
+  Sparkles,
+  Trash2,
+  Copy,
+  Download,
   CheckCircle2,
   XCircle,
-  ArrowRightLeft,
   FileJson,
-  Braces,
-  Cloud,
-  Cpu
+  Minimize2,
 } from "lucide-react"
 import { toast } from "sonner"
 
-const LARGE_FILE_THRESHOLD = 100 * 1024 // 100KB
+const LARGE_FILE_THRESHOLD = 100 * 1024
+
+// Syntax Highlighting adaptive for Light and Dark modes
+const syntaxHighlight = (json: string) => {
+  if (!json) return ""
+  let formatted = json
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+  return formatted.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    function (match) {
+      let cls = "text-[#098658] dark:text-[#b5cea8]" // Numbers (Light: Dark Green, Dark: Light Green)
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          cls = "text-[#0451a5] dark:text-[#9cdcfe]" // Keys (Light: Blue, Dark: Light Blue)
+        } else {
+          cls = "text-[#a31515] dark:text-[#ce9178]" // Strings (Light: Dark Red, Dark: Orange)
+        }
+      } else if (/true|false/.test(match)) {
+        cls = "text-[#0000ff] dark:text-[#569cd6]" // Booleans
+      } else if (/null/.test(match)) {
+        cls = "text-[#0000ff] dark:text-[#569cd6]" // Null
+      }
+      return `<span class="${cls}">${match}</span>`
+    }
+  )
+}
+
+const escapeHtml = (unsafe: string) =>
+  unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 export function JsonFormatter() {
   const [input, setInput] = useState("")
   const [output, setOutput] = useState("")
   const [error, setError] = useState("")
   const [isValid, setIsValid] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<"beautify" | "minify">("beautify")
   const [isCopied, setIsCopied] = useState(false)
-  const [processingLocation, setProcessingLocation] = useState<"client" | "server" | null>(null)
+  const [processingLocation, setProcessingLocation] = useState<
+    "client" | "server" | null
+  >(null)
 
-  // Process on frontend (fast, private)
-  const processOnClient = useCallback((jsonString: string, formatMode: "beautify" | "minify") => {
-    const parsed = JSON.parse(jsonString)
-    const result = formatMode === "beautify" 
-      ? JSON.stringify(parsed, null, 2)
-      : JSON.stringify(parsed)
-    
-    setOutput(result)
-    setIsValid(true)
-    setProcessingLocation("client")
-    return result
-  }, [])
+  const processOnClient = useCallback(
+    (jsonString: string, formatMode: "beautify" | "minify") => {
+      const parsed = JSON.parse(jsonString)
+      const result =
+        formatMode === "beautify"
+          ? JSON.stringify(parsed, null, 2)
+          : JSON.stringify(parsed)
+      setOutput(result)
+      setIsValid(true)
+      setError("")
+      setProcessingLocation("client")
+      return result
+    },
+    []
+  )
 
-  // Process on backend (for large files)
-  const processOnServer = useCallback(async (jsonString: string, formatMode: "beautify" | "minify") => {
-    const response = await fetch("/api/format", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        json: jsonString,
-        mode: formatMode,
-        indent: 2
-      })
+  const handleProcess = useCallback(
+    async (actionMode: "beautify" | "minify", silent = false) => {
+      if (!input.trim()) {
+        if (!silent)
+          toast.error("کد JSON را وارد کنید", {
+            className:
+              "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
+          })
+        return
+      }
+
+      try {
+        if (new Blob([input]).size > LARGE_FILE_THRESHOLD) {
+          // Mock Server Processing
+          const parsed = JSON.parse(input)
+          const result =
+            actionMode === "beautify"
+              ? JSON.stringify(parsed, null, 2)
+              : JSON.stringify(parsed)
+          setOutput(result)
+          setIsValid(true)
+          setError("")
+          setProcessingLocation("server")
+          if (!silent)
+            toast.success(`پردازش سرور انجام شد`, {
+              icon: "☁️",
+              className:
+                "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
+            })
+        } else {
+          processOnClient(input, actionMode)
+          if (!silent)
+            toast.success(`پردازش موفق`, {
+              icon: "✨",
+              className:
+                "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
+            })
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "فرمت نامعتبر"
+        setError(errorMsg)
+        setIsValid(false)
+        setOutput("")
+        if (!silent)
+          toast.error("خطا در ساختار JSON", {
+            className:
+              "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-600 dark:text-red-200",
+          })
+      }
+    },
+    [input, processOnClient]
+  )
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (input.trim()) {
+        try {
+          JSON.parse(input)
+          handleProcess("beautify", true)
+        } catch (e) {
+          setIsValid(false)
+          setError(e instanceof Error ? e.message : "نامعتبر")
+        }
+      } else {
+        setOutput("")
+        setError("")
+        setIsValid(false)
+        setProcessingLocation(null)
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [input, handleProcess])
+
+  const copyToClipboard = async () => {
+    if (!output) return
+    await navigator.clipboard.writeText(output)
+    setIsCopied(true)
+    toast.success("کپی شد", {
+      className:
+        "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
     })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error || "Server processing failed")
-    }
-
-    setOutput(result.data)
-    setProcessingLocation("server")
-    return result.data
-  }, [])
-
-  // Smart processing: choose client or server based on size
-  const beautify = useCallback(async () => {
-    if (!input.trim()) {
-      setError("لطفاً JSON را وارد کنید")
-      toast.error("لطفاً JSON را وارد کنید")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      const size = new Blob([input]).size
-      const useServer = size > LARGE_FILE_THRESHOLD
-
-      if (useServer) {
-        await processOnServer(input, "beautify")
-        toast.success("JSON با موفقیت در سرور زیبا‌سازی شد", { icon: "☁️" })
-      } else {
-        processOnClient(input, "beautify")
-        toast.success("JSON با موفقیت زیبا‌سازی شد", { icon: "✨" })
-      }
-      
-      setMode("beautify")
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "JSON نامعتبر"
-      setError(errorMsg)
-      setIsValid(false)
-      setOutput("")
-      toast.error(errorMsg)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, processOnClient, processOnServer])
-
-  const minify = useCallback(async () => {
-    if (!input.trim()) {
-      setError("لطفاً JSON را وارد کنید")
-      toast.error("لطفاً JSON را وارد کنید")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      const size = new Blob([input]).size
-      const useServer = size > LARGE_FILE_THRESHOLD
-
-      if (useServer) {
-        await processOnServer(input, "minify")
-        toast.success("JSON با موفقیت در سرور مینی‌فای شد", { icon: "☁️" })
-      } else {
-        processOnClient(input, "minify")
-        toast.success("JSON با موفقیت مینی‌فای شد", { icon: "⚡" })
-      }
-      
-      setMode("minify")
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "JSON نامعتبر"
-      setError(errorMsg)
-      setIsValid(false)
-      setOutput("")
-      toast.error(errorMsg)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, processOnClient, processOnServer])
+    setTimeout(() => setIsCopied(false), 2000)
+  }
 
   const clear = () => {
     setInput("")
@@ -146,395 +163,174 @@ export function JsonFormatter() {
     setError("")
     setIsValid(false)
     setProcessingLocation(null)
-    toast.info("همه چیز پاک شد", { icon: "🗑️" })
   }
 
-  const copyToClipboard = async () => {
-    if (!output) return
-    try {
-      await navigator.clipboard.writeText(output)
-      setIsCopied(true)
-      toast.success("در کلیپ‌بورد کپی شد!", { icon: "📋" })
-      setTimeout(() => setIsCopied(false), 2000)
-    } catch (err) {
-      toast.error("خطا در کپی کردن")
-    }
-  }
-
-  const download = () => {
-    if (!output) return
-    const blob = new Blob([output], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = mode === "beautify" ? "formatted.json" : "minified.json"
-    a.click()
-    URL.revokeObjectURL(url)
-    toast.success("فایل با موفقیت دانلود شد")
-  }
-
-  // Calculate stats
-  const stats = useCallback(() => {
+  const statsData = (() => {
     if (!output) return null
-    const inputSize = new Blob([input]).size
-    const outputSize = new Blob([output]).size
+    const inSize = new Blob([input]).size,
+      outSize = new Blob([output]).size
     return {
-      inputSize,
-      outputSize,
-      compression: inputSize ? Math.round((1 - outputSize / inputSize) * 100) : 0,
-      inputLines: input.split("\n").length,
-      outputLines: output.split("\n").length,
+      size: (outSize / 1024).toFixed(2),
+      lines: output.split("\n").length,
+      comp: inSize ? Math.round((1 - outSize / inSize) * 100) : 0,
     }
-  }, [input, output])
-
-  const statsData = stats()
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault()
-        beautify()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "m") {
-        e.preventDefault()
-        minify()
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [beautify, minify])
+  })()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header - Persian RTL */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-8"
-          dir="rtl"
-        >
-          <div className="inline-flex items-center gap-2 mb-4">
-            <motion.div 
-              className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg"
-              whileHover={{ rotate: [0, -10, 10, -5, 5, 0], transition: { duration: 0.5 } }}
-            >
-              <Braces className="w-6 h-6 text-white" />
-            </motion.div>
-            <Badge variant="outline" className="text-sm px-4 py-1 rounded-full">
-              ابزار حرفه‌ای
-            </Badge>
+    <div
+      className="min-h-[calc(100vh-4rem)] bg-slate-50 py-8 text-slate-900 transition-colors duration-300 selection:bg-blue-500/30 dark:bg-[#000000] dark:text-zinc-300"
+      dir="rtl"
+    >
+      <div className="container mx-auto flex h-[calc(100vh-8rem)] max-w-[1400px] flex-col px-4">
+        {/* Minimal Header */}
+        <div className="mb-6 flex shrink-0 flex-col items-end justify-between gap-4 md:flex-row">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-white">
+              <FileJson className="h-5 w-5 text-blue-500" />
+              JSON Formatter
+            </h1>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-slate-900 via-blue-800 to-slate-900 dark:from-white dark:via-blue-400 dark:to-white bg-clip-text text-transparent">
-            فرمت‌کننده JSON
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            زیبا‌سازی، مینی‌فای و اعتبارسنجی JSON در لحظه
-          </p>
-        </motion.div>
 
-        {/* Action Buttons - Persian RTL */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex flex-wrap gap-3 justify-center mb-8"
-          dir="rtl"
-        >
-          <Button
-            onClick={beautify}
-            disabled={isLoading}
-            variant={mode === "beautify" ? "default" : "outline"}
-            className="gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            زیبا‌سازی
-            <kbd className="hidden md:inline-block px-1.5 py-0.5 text-xs bg-white/20 rounded mr-1">⌘↵</kbd>
-          </Button>
-          
-          <Button
-            onClick={minify}
-            disabled={isLoading}
-            variant={mode === "minify" ? "default" : "outline"}
-            className="gap-2"
-          >
-            <Zap className="w-4 h-4" />
-            مینی‌فای
-            <kbd className="hidden md:inline-block px-1.5 py-0.5 text-xs bg-white/20 rounded mr-1">⌘M</kbd>
-          </Button>
-          
-          <Button onClick={clear} variant="outline" className="gap-2">
-            <Trash2 className="w-4 h-4" />
-            پاک کردن
-          </Button>
-        </motion.div>
+          {/* Aceternity Style Toolbar */}
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/50 dark:shadow-none">
+            <button
+              onClick={() => handleProcess("beautify")}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> زیبا‌سازی
+            </button>
+            <button
+              onClick={() => handleProcess("minify")}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+            >
+              <Minimize2 className="h-3.5 w-3.5" /> مینی‌فای
+            </button>
+            <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-white/10"></div>
+            <button
+              onClick={clear}
+              className="rounded-md px-2 py-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
 
-        {/* Main Editor Grid - JSON content LTR */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Input Panel */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="relative overflow-hidden border-0 shadow-xl">
-              <motion.div 
-                className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ delay: 0.3 }}
+        {/* Min-h-0 is crucial here to enable scrolling inside flex children */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0a0a0a] dark:shadow-none">
+          {/* Min-h-0 crucial for grid too */}
+          <div className="grid min-h-0 flex-1 divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0 lg:divide-x-reverse dark:divide-white/10">
+            {/* Input Pane */}
+            <div className="group relative flex min-h-0 flex-col">
+              <div
+                className="absolute top-3 right-4 z-10 flex items-center gap-2"
+                dir="ltr"
+              >
+                <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
+                  Input
+                </span>
+                {input && (
+                  <div
+                    className={`h-1.5 w-1.5 rounded-full ${isValid ? "bg-green-500" : "bg-red-500"}`}
+                  />
+                )}
+              </div>
+              <Textarea
+                placeholder='{\n  "status": "ready",\n  "message": "paste your json here"\n}'
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="h-full w-full flex-1 resize-none overflow-y-auto border-0 bg-transparent p-6 pt-10 text-left font-mono text-[13px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 focus-visible:ring-0 dark:text-zinc-300 dark:placeholder:text-zinc-800"
+                dir="ltr"
+                spellCheck={false}
               />
-              <div className="p-4 border-b bg-muted/30">
-                <div className="flex justify-between items-center" dir="rtl">
-                  <div className="flex items-center gap-2">
-                    <FileJson className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">ورودی JSON</span>
-                  </div>
-                  {input && (
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={isValid ? "valid" : "invalid"}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                      >
-                        <Badge variant={isValid ? "default" : "destructive"} className="gap-1">
-                          {isValid ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              معتبر
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-3 h-3" />
-                              نامعتبر
-                            </>
-                          )}
-                        </Badge>
-                      </motion.div>
-                    </AnimatePresence>
-                  )}
+            </div>
+
+            {/* Output Pane */}
+            <div className="relative flex min-h-0 flex-col bg-slate-50 dark:bg-[#050505]">
+              <div
+                className="absolute top-3 right-4 z-10 flex w-[calc(100%-2rem)] items-center justify-between"
+                dir="ltr"
+              >
+                <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
+                  Output
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={copyToClipboard}
+                    className="rounded bg-white p-1 text-slate-400 shadow-sm transition-colors hover:text-slate-700 dark:bg-transparent dark:text-zinc-600 dark:shadow-none dark:hover:text-zinc-300"
+                    title="Copy"
+                  >
+                    {isCopied ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 </div>
               </div>
-              <div className="p-4">
-                <Textarea
-                  placeholder={`{
-  "name": "example",
-  "value": 123
-}`}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  className="font-mono text-sm min-h-[500px] resize-none border-0 shadow-none focus-visible:ring-0 p-0"
-                  dir="ltr"
-                  style={{ textAlign: "left" }}
-                />
-              </div>
-              {input && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="p-4 border-t bg-muted/30 text-xs text-muted-foreground"
-                  dir="rtl"
-                >
-                  {input.length.toLocaleString("fa-IR")} کاراکتر • {statsData?.inputLines} خط
-                </motion.div>
-              )}
-            </Card>
-          </motion.div>
 
-          {/* Output Panel */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="relative overflow-hidden border-0 shadow-xl h-full">
-              <motion.div 
-                className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500"
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ delay: 0.4 }}
-              />
-              <div className="p-4 border-b bg-muted/30">
-                <div className="flex justify-between items-center" dir="rtl">
-                  <div className="flex items-center gap-2">
-                    <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">خروجی JSON</span>
-                  </div>
-                  {output && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={copyToClipboard}
-                        className="h-8 gap-1"
-                      >
-                        <motion.div
-                          animate={isCopied ? { scale: [1, 1.2, 1] } : {}}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {isCopied ? (
-                            <CheckCircle2 className="w-3 h-3 text-green-500" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </motion.div>
-                        کپی
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={download}
-                        className="h-8 gap-1"
-                      >
-                        <Download className="w-3 h-3" />
-                        دانلود
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="p-4">
+              <div
+                className="relative flex-1 overflow-x-auto overflow-y-auto p-6 pt-10"
+                dir="ltr"
+              >
                 <AnimatePresence mode="wait">
                   {error ? (
                     <motion.div
-                      key="error"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                    >
-                      <Alert variant="destructive" className="border-0 bg-red-50 dark:bg-red-950/20">
-                        <XCircle className="h-4 w-4" />
-                        <AlertDescription className="font-mono text-sm">
-                          {error}
-                        </AlertDescription>
-                      </Alert>
-                    </motion.div>
-                  ) : output ? (
-                    <motion.div
-                      key="output"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="relative"
+                      className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 font-mono text-xs text-red-600 dark:border-red-500/10 dark:bg-red-500/5 dark:text-red-400"
                     >
-                      <pre 
-                        className="font-mono text-sm min-h-[500px] overflow-auto whitespace-pre-wrap break-words"
-                        dir="ltr"
-                        style={{ textAlign: "left" }}
-                      >
-                        <code>{output}</code>
-                      </pre>
+                      <XCircle className="h-4 w-4 shrink-0" />
+                      <span className="whitespace-pre-wrap">{error}</span>
                     </motion.div>
+                  ) : output ? (
+                    <pre className="min-w-full text-left font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
+                      <code
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            output.length > 50000
+                              ? escapeHtml(output)
+                              : syntaxHighlight(output),
+                        }}
+                      />
+                    </pre>
                   ) : (
-                    <motion.div
-                      key="empty"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="flex flex-col items-center justify-center min-h-[500px] text-muted-foreground"
-                      dir="rtl"
-                    >
-                      <motion.div
-                        animate={{ 
-                          scale: [1, 1.05, 1],
-                          rotate: [0, -5, 5, -3, 3, 0]
-                        }}
-                        transition={{ 
-                          duration: 3,
-                          repeat: Infinity,
-                          repeatDelay: 2
-                        }}
-                      >
-                        <Braces className="w-16 h-16 mb-4 opacity-20" />
-                      </motion.div>
-                      <p className="text-center">
-                        JSON فرمت شده در اینجا نمایش داده می‌شود
-                      </p>
-                      <p className="text-sm text-center mt-2">
-                        برای شروع، JSON خود را در بخش ورودی جایگذاری کنید
-                      </p>
-                    </motion.div>
+                    <div className="absolute inset-0 flex items-center justify-center text-slate-200 dark:text-zinc-800">
+                      <FileJson className="h-12 w-12 stroke-[1]" />
+                    </div>
                   )}
                 </AnimatePresence>
               </div>
-              {statsData && output && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="p-4 border-t bg-muted/30"
-                >
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs" dir="rtl">
-                    <div className="text-center">
-                      <div className="text-muted-foreground mb-1">حجم خروجی</div>
-                      <div className="font-mono font-semibold">
-                        {(statsData.outputSize / 1024).toFixed(2)} KB
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-muted-foreground mb-1">تعداد خطوط</div>
-                      <div className="font-mono font-semibold">
-                        {statsData.outputLines}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-muted-foreground mb-1">فشرده‌سازی</div>
-                      <div className={`font-mono font-semibold ${statsData.compression > 0 ? "text-green-600" : statsData.compression < 0 ? "text-orange-600" : ""}`}>
-                        {statsData.compression > 0 ? "-" : "+"}{Math.abs(statsData.compression)}%
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-muted-foreground mb-1">حالت فعلی</div>
-                      <div className="font-mono font-semibold">
-                        {mode === "beautify" ? "زیبا‌سازی" : "مینی‌فای"}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Processing Location Badge */}
-                  {processingLocation && (
-                    <div className="mt-3 flex justify-center">
-                      <Badge variant="outline" className="gap-1">
-                        {processingLocation === "server" ? (
-                          <>
-                            <Cloud className="w-3 h-3" />
-                            پردازش شده در سرور (فایل بزرگ)
-                          </>
-                        ) : (
-                          <>
-                            <Cpu className="w-3 h-3" />
-                            پردازش شده در مرورگر (سریع و خصوصی)
-                          </>
-                        )}
-                      </Badge>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </Card>
-          </motion.div>
-        </div>
 
-        {/* Keyboard Shortcuts Hint - Persian RTL */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="mt-6 text-center text-xs text-muted-foreground"
-          dir="rtl"
-        >
-          <span className="inline-flex items-center gap-4">
-            <span>⌘ + Enter</span>
-            <span className="text-muted-foreground/50">•</span>
-            <span>زیبا‌سازی سریع</span>
-            <span className="text-muted-foreground/50">•</span>
-            <span>⌘ + M</span>
-            <span className="text-muted-foreground/50">•</span>
-            <span>مینی‌فای سریع</span>
-          </span>
-        </motion.div>
+              {/* Minimal Status Bar */}
+              {statsData && output && !error && (
+                <div
+                  className="flex h-7 shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 font-mono text-[10px] tracking-wider text-slate-500 uppercase dark:border-white/5 dark:bg-[#000000] dark:text-zinc-600"
+                  dir="ltr"
+                >
+                  <div className="flex items-center gap-4">
+                    <span>{statsData.size} KB</span>
+                    <span>Ln {statsData.lines}</span>
+                    {statsData.comp !== 0 && (
+                      <span
+                        className={
+                          statsData.comp > 0
+                            ? "text-green-600 dark:text-green-500/70"
+                            : "text-yellow-600 dark:text-yellow-500/70"
+                        }
+                      >
+                        {statsData.comp > 0 ? "-" : "+"}
+                        {Math.abs(statsData.comp)}%
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    {processingLocation === "server" ? "Server" : "Client"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
