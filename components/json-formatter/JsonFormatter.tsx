@@ -1,23 +1,27 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Sparkles,
   Trash2,
   Copy,
-  Download,
   CheckCircle2,
   XCircle,
   FileJson,
   Minimize2,
+  ChevronRight,
+  ChevronDown,
+  ListTree,
+  AlignLeft,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useJsonFormatter } from "@/hooks/useJsonFormatter"
 
 const LARGE_FILE_THRESHOLD = 100 * 1024
 
-// Syntax Highlighting adaptive for Light and Dark modes
+// --- Helper Functions ---
 const syntaxHighlight = (json: string) => {
   if (!json) return ""
   let formatted = json
@@ -27,12 +31,12 @@ const syntaxHighlight = (json: string) => {
   return formatted.replace(
     /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
     function (match) {
-      let cls = "text-[#098658] dark:text-[#b5cea8]" // Numbers (Light: Dark Green, Dark: Light Green)
+      let cls = "text-[#098658] dark:text-[#b5cea8]" // Numbers
       if (/^"/.test(match)) {
         if (/:$/.test(match)) {
-          cls = "text-[#0451a5] dark:text-[#9cdcfe]" // Keys (Light: Blue, Dark: Light Blue)
+          cls = "text-[#0451a5] dark:text-[#9cdcfe]" // Keys
         } else {
-          cls = "text-[#a31515] dark:text-[#ce9178]" // Strings (Light: Dark Red, Dark: Orange)
+          cls = "text-[#a31515] dark:text-[#ce9178]" // Strings
         }
       } else if (/true|false/.test(match)) {
         cls = "text-[#0000ff] dark:text-[#569cd6]" // Booleans
@@ -44,107 +48,214 @@ const syntaxHighlight = (json: string) => {
   )
 }
 
-const escapeHtml = (unsafe: string) =>
-  unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+// --- Interactive JSON Tree Components ---
+const JsonNode = ({
+  keyName,
+  value,
+  isLast,
+  isRoot,
+}: {
+  keyName?: string
+  value: any
+  isLast: boolean
+  isRoot?: boolean
+}) => {
+  const [expanded, setExpanded] = useState(true)
 
+  const isArray = Array.isArray(value)
+  const isObject = value !== null && typeof value === "object" && !isArray
+  const isComplex = isArray || isObject
+
+  const renderPrimitive = () => {
+    if (value === null)
+      return <span className="text-[#0000ff] dark:text-[#569cd6]">null</span>
+    if (typeof value === "boolean")
+      return (
+        <span className="text-[#0000ff] dark:text-[#569cd6]">
+          {value ? "true" : "false"}
+        </span>
+      )
+    if (typeof value === "number")
+      return <span className="text-[#098658] dark:text-[#b5cea8]">{value}</span>
+    if (typeof value === "string") {
+      return (
+        <span className="break-words whitespace-pre-wrap text-[#a31515] dark:text-[#ce9178]">
+          "{value}"
+        </span>
+      )
+    }
+    return null
+  }
+
+  if (!isComplex) {
+    return (
+      <div className="py-[2px]">
+        {keyName && (
+          <span className="text-[#0451a5] dark:text-[#9cdcfe]">
+            "{keyName}"
+          </span>
+        )}
+        {keyName && <span className="mr-1 text-slate-500">:</span>}
+        {renderPrimitive()}
+        {!isLast && <span className="text-slate-500">,</span>}
+      </div>
+    )
+  }
+
+  const brackets = isArray ? ["[", "]"] : ["{", "}"]
+  const keys = Object.keys(value)
+  const isEmpty = keys.length === 0
+
+  return (
+    <div className="relative py-[2px]">
+      <div className="group flex items-start">
+        {!isEmpty && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="absolute top-[4px] -left-4 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-sm text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </button>
+        )}
+
+        <div>
+          {keyName && (
+            <span className="text-[#0451a5] dark:text-[#9cdcfe]">
+              "{keyName}"
+            </span>
+          )}
+          {keyName && <span className="mr-1 text-slate-500">:</span>}
+          <span className="text-slate-600 dark:text-slate-400">
+            {brackets[0]}
+          </span>
+
+          {!expanded && !isEmpty && (
+            <span
+              onClick={() => setExpanded(true)}
+              className="mx-2 cursor-pointer rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-300 dark:bg-white/10 dark:text-zinc-400 dark:hover:bg-white/20"
+            >
+              {isArray ? `${keys.length} items` : `${keys.length} keys`}
+            </span>
+          )}
+
+          {!expanded && (
+            <span className="text-slate-600 dark:text-slate-400">
+              {brackets[1]}
+              {!isLast ? "," : ""}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {expanded && !isEmpty && (
+        <div className="ml-1.5 border-l border-slate-200 pl-4 hover:border-slate-300 dark:border-white/5 dark:hover:border-white/20">
+          {keys.map((key, index) => (
+            <JsonNode
+              key={key}
+              keyName={isArray ? undefined : key}
+              value={value[key as keyof typeof value]}
+              isLast={index === keys.length - 1}
+            />
+          ))}
+        </div>
+      )}
+      {expanded && !isEmpty && (
+        <div className="text-slate-600 dark:text-slate-400">
+          {brackets[1]}
+          {!isLast ? "," : ""}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function InteractiveJsonViewer({ output }: { output: string }) {
+  try {
+    const parsed = JSON.parse(output)
+    return (
+      <div className="min-w-max pb-4 text-left font-mono text-[13px] leading-relaxed select-text">
+        <JsonNode value={parsed} isLast={true} isRoot={true} />
+      </div>
+    )
+  } catch (e) {
+    return <pre className="text-red-500">Error rendering tree</pre>
+  }
+}
+
+// --- Main Application Component ---
 export function JsonFormatter() {
-  const [input, setInput] = useState("")
-  const [output, setOutput] = useState("")
-  const [error, setError] = useState("")
-  const [isValid, setIsValid] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
-  const [processingLocation, setProcessingLocation] = useState<
-    "client" | "server" | null
-  >(null)
+  const [viewMode, setViewMode] = useState<"tree" | "raw">("tree")
 
-  const processOnClient = useCallback(
-    (jsonString: string, formatMode: "beautify" | "minify") => {
-      const parsed = JSON.parse(jsonString)
-      const result =
-        formatMode === "beautify"
-          ? JSON.stringify(parsed, null, 2)
-          : JSON.stringify(parsed)
-      setOutput(result)
-      setIsValid(true)
-      setError("")
-      setProcessingLocation("client")
-      return result
-    },
-    []
-  )
+  const {
+    input,
+    setInput,
+    output,
+    error,
+    isValid,
+    mode,
+    processingLocation,
+    beautify,
+    minify,
+    clear,
+  } = useJsonFormatter()
 
-  const handleProcess = useCallback(
-    async (actionMode: "beautify" | "minify", silent = false) => {
-      if (!input.trim()) {
-        if (!silent)
-          toast.error("کد JSON را وارد کنید", {
-            className:
-              "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
-          })
-        return
-      }
+  // Auto-switch to raw view if minified or if file is massive (performance protection)
+  useEffect(() => {
+    if (output && isValid) {
+      if (mode === "minify") setViewMode("raw")
+      else if (output.length > LARGE_FILE_THRESHOLD) setViewMode("raw")
+      else setViewMode("tree")
+    }
+  }, [mode, output, isValid])
 
-      try {
-        if (new Blob([input]).size > LARGE_FILE_THRESHOLD) {
-          // Mock Server Processing
-          const parsed = JSON.parse(input)
-          const result =
-            actionMode === "beautify"
-              ? JSON.stringify(parsed, null, 2)
-              : JSON.stringify(parsed)
-          setOutput(result)
-          setIsValid(true)
-          setError("")
-          setProcessingLocation("server")
-          if (!silent)
-            toast.success(`پردازش سرور انجام شد`, {
-              icon: "☁️",
-              className:
-                "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
-            })
-        } else {
-          processOnClient(input, actionMode)
-          if (!silent)
-            toast.success(`پردازش موفق`, {
-              icon: "✨",
-              className:
-                "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
-            })
+  const handleProcess = async (actionMode: "beautify" | "minify") => {
+    if (!input.trim()) {
+      toast.error("کد JSON را وارد کنید", {
+        className:
+          "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
+      })
+      return
+    }
+
+    if (actionMode === "beautify") await beautify()
+    if (actionMode === "minify") await minify()
+
+    try {
+      JSON.parse(input)
+      toast.success(
+        `پردازش ${new Blob([input]).size > LARGE_FILE_THRESHOLD ? "سرور" : "موفق"} انجام شد`,
+        {
+          icon: new Blob([input]).size > LARGE_FILE_THRESHOLD ? "☁️" : "✨",
+          className:
+            "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
         }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "فرمت نامعتبر"
-        setError(errorMsg)
-        setIsValid(false)
-        setOutput("")
-        if (!silent)
-          toast.error("خطا در ساختار JSON", {
-            className:
-              "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-600 dark:text-red-200",
-          })
-      }
-    },
-    [input, processOnClient]
-  )
+      )
+    } catch {
+      toast.error("خطا در ساختار JSON", {
+        className:
+          "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-600 dark:text-red-200",
+      })
+    }
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (input.trim()) {
-        try {
-          JSON.parse(input)
-          handleProcess("beautify", true)
-        } catch (e) {
-          setIsValid(false)
-          setError(e instanceof Error ? e.message : "نامعتبر")
+        const size = new Blob([input]).size
+        if (size <= LARGE_FILE_THRESHOLD) {
+          beautify()
         }
       } else {
-        setOutput("")
-        setError("")
-        setIsValid(false)
-        setProcessingLocation(null)
+        clear()
       }
     }, 400)
     return () => clearTimeout(timer)
-  }, [input, handleProcess])
+  }, [input, beautify, clear])
 
   const copyToClipboard = async () => {
     if (!output) return
@@ -155,14 +266,6 @@ export function JsonFormatter() {
         "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
     })
     setTimeout(() => setIsCopied(false), 2000)
-  }
-
-  const clear = () => {
-    setInput("")
-    setOutput("")
-    setError("")
-    setIsValid(false)
-    setProcessingLocation(null)
   }
 
   const statsData = (() => {
@@ -191,7 +294,6 @@ export function JsonFormatter() {
             </h1>
           </div>
 
-          {/* Aceternity Style Toolbar */}
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/50 dark:shadow-none">
             <button
               onClick={() => handleProcess("beautify")}
@@ -215,9 +317,8 @@ export function JsonFormatter() {
           </div>
         </div>
 
-        {/* Min-h-0 is crucial here to enable scrolling inside flex children */}
+        {/* Editor Area */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0a0a0a] dark:shadow-none">
-          {/* Min-h-0 crucial for grid too */}
           <div className="grid min-h-0 flex-1 divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0 lg:divide-x-reverse dark:divide-white/10">
             {/* Input Pane */}
             <div className="group relative flex min-h-0 flex-col">
@@ -250,9 +351,32 @@ export function JsonFormatter() {
                 className="absolute top-3 right-4 z-10 flex w-[calc(100%-2rem)] items-center justify-between"
                 dir="ltr"
               >
-                <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
-                  Output
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
+                    Output
+                  </span>
+
+                  {/* View Toggles */}
+                  {isValid && output && (
+                    <div className="flex items-center rounded-md border border-slate-200 bg-white/50 p-0.5 dark:border-white/10 dark:bg-zinc-900/50">
+                      <button
+                        onClick={() => setViewMode("tree")}
+                        title="Interactive Tree"
+                        className={`rounded px-1.5 py-1 transition-colors ${viewMode === "tree" ? "bg-white text-blue-500 shadow-sm dark:bg-zinc-800 dark:text-blue-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"}`}
+                      >
+                        <ListTree className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setViewMode("raw")}
+                        title="Raw Text"
+                        className={`rounded px-1.5 py-1 transition-colors ${viewMode === "raw" ? "bg-white text-blue-500 shadow-sm dark:bg-zinc-800 dark:text-blue-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"}`}
+                      >
+                        <AlignLeft className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-1">
                   <button
                     onClick={copyToClipboard}
@@ -269,7 +393,7 @@ export function JsonFormatter() {
               </div>
 
               <div
-                className="relative flex-1 overflow-x-auto overflow-y-auto p-6 pt-10"
+                className="relative flex-1 overflow-x-auto overflow-y-auto p-6 pt-12"
                 dir="ltr"
               >
                 <AnimatePresence mode="wait">
@@ -283,16 +407,17 @@ export function JsonFormatter() {
                       <span className="whitespace-pre-wrap">{error}</span>
                     </motion.div>
                   ) : output ? (
-                    <pre className="min-w-full text-left font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
-                      <code
-                        dangerouslySetInnerHTML={{
-                          __html:
-                            output.length > 50000
-                              ? escapeHtml(output)
-                              : syntaxHighlight(output),
-                        }}
-                      />
-                    </pre>
+                    viewMode === "tree" ? (
+                      <InteractiveJsonViewer output={output} />
+                    ) : (
+                      <pre className="min-w-full text-left font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
+                        <code
+                          dangerouslySetInnerHTML={{
+                            __html: syntaxHighlight(output),
+                          }}
+                        />
+                      </pre>
+                    )
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-slate-200 dark:text-zinc-800">
                       <FileJson className="h-12 w-12 stroke-[1]" />

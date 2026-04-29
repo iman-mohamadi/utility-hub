@@ -29,7 +29,7 @@ export default function Home() {
       description:
         "کدها و متن‌های خود را در محیطی امن با سینتکس هایلایت به اشتراک بگذارید.",
       href: "/copy-paste",
-      status: "coming",
+      status: "active",
     },
     {
       icon: LinkIcon,
