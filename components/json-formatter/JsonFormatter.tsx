@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ListTree,
   AlignLeft,
+  Loader2, // Added Loader2 for the spinner
 } from "lucide-react"
 import { toast } from "sonner"
 import { useJsonFormatter } from "@/hooks/useJsonFormatter"
@@ -199,6 +200,7 @@ export function JsonFormatter() {
     isValid,
     mode,
     processingLocation,
+    isProcessing, // Destructure isProcessing from the hook
     beautify,
     minify,
     clear,
@@ -222,20 +224,19 @@ export function JsonFormatter() {
       return
     }
 
-    if (actionMode === "beautify") await beautify()
-    if (actionMode === "minify") await minify()
+    // Await the hook and capture the boolean success state
+    const isSuccess =
+      actionMode === "beautify" ? await beautify() : await minify()
 
-    try {
-      JSON.parse(input)
-      toast.success(
-        `پردازش ${new Blob([input]).size > LARGE_FILE_THRESHOLD ? "سرور" : "موفق"} انجام شد`,
-        {
-          icon: new Blob([input]).size > LARGE_FILE_THRESHOLD ? "☁️" : "✨",
-          className:
-            "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800",
-        }
-      )
-    } catch {
+    if (isSuccess !== false) {
+      // Assuming hook returns true/undefined on success
+      const isServer = new Blob([input]).size > LARGE_FILE_THRESHOLD
+      toast.success(`پردازش ${isServer ? "سرور" : "موفق"} انجام شد`, {
+        icon: isServer ? "☁️" : "✨",
+        className:
+          "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
+      })
+    } else {
       toast.error("خطا در ساختار JSON", {
         className:
           "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-600 dark:text-red-200",
@@ -297,20 +298,23 @@ export function JsonFormatter() {
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/50 dark:shadow-none">
             <button
               onClick={() => handleProcess("beautify")}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+              disabled={isProcessing}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
             >
               <Sparkles className="h-3.5 w-3.5" /> زیبا‌سازی
             </button>
             <button
               onClick={() => handleProcess("minify")}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+              disabled={isProcessing}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
             >
               <Minimize2 className="h-3.5 w-3.5" /> مینی‌فای
             </button>
             <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-white/10"></div>
             <button
               onClick={clear}
-              className="rounded-md px-2 py-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+              disabled={isProcessing}
+              className="rounded-md px-2 py-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -347,6 +351,25 @@ export function JsonFormatter() {
 
             {/* Output Pane */}
             <div className="relative flex min-h-0 flex-col bg-slate-50 dark:bg-[#050505]">
+              {/* LOADING OVERLAY */}
+              <AnimatePresence>
+                {isProcessing && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-[#050505]/50"
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                      <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                        در حال پردازش...
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div
                 className="absolute top-3 right-4 z-10 flex w-[calc(100%-2rem)] items-center justify-between"
                 dir="ltr"

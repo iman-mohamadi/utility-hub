@@ -1,148 +1,99 @@
-"use client"
-
+// hooks/useJsonFormatter.ts
 import { useState, useCallback } from "react"
 
-const LARGE_FILE_THRESHOLD = 100 * 1024 // 100KB - use backend for larger files
+export const LARGE_FILE_THRESHOLD = 100 * 1024 // 100KB
 
 export function useJsonFormatter() {
   const [input, setInput] = useState("")
   const [output, setOutput] = useState("")
-  const [error, setError] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const [isValid, setIsValid] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<"beautify" | "minify">("beautify")
-  const [processingLocation, setProcessingLocation] = useState<"client" | "server">("client")
+  const [mode, setMode] = useState<"beautify" | "minify" | null>(null)
+  const [processingLocation, setProcessingLocation] = useState<
+    "client" | "server" | null
+  >(null)
 
-  // Process on frontend (fast, private)
-  const processOnClient = useCallback((jsonString: string, formatMode: "beautify" | "minify") => {
-    try {
-      const parsed = JSON.parse(jsonString)
-      const result = formatMode === "beautify" 
-        ? JSON.stringify(parsed, null, 2)
-        : JSON.stringify(parsed)
-      
-      setOutput(result)
-      setIsValid(true)
-      setProcessingLocation("client")
-      return { success: true, data: result }
-    } catch (err) {
-      throw err
-    }
-  }, [])
+  // NEW: Add a processing state
+  const [isProcessing, setIsProcessing] = useState(false)
 
-  // Process on backend (for large files)
-  const processOnServer = useCallback(async (jsonString: string, formatMode: "beautify" | "minify") => {
-    try {
-      const response = await fetch("/api/format", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          json: jsonString,
-          mode: formatMode,
-          indent: 2
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || "Server processing failed")
+  const processJson = useCallback(
+    async (action: "beautify" | "minify") => {
+      if (!input.trim()) {
+        clear()
+        return false // Return false for failure
       }
 
-      setOutput(result.data)
-      setProcessingLocation("server")
-      return { success: true, data: result.data, metadata: result.metadata }
-    } catch (err) {
-      throw err
-    }
-  }, [])
+      setIsProcessing(true) // Turn on the loading spinner
+      setMode(action)
+      setError(null)
 
-  // Smart processing: choose client or server based on size
-  const beautify = useCallback(async () => {
-    if (!input.trim()) {
-      setError("لطفاً JSON را وارد کنید")
-      return
-    }
+      // CRITICAL FIX: Give the browser 10ms to paint the loading spinner to the screen
+      // BEFORE we freeze the main thread with heavy parsing or regex.
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
-    setIsLoading(true)
-    setError("")
+      try {
+        const size = new Blob([input]).size
 
-    try {
-      const size = new Blob([input]).size
-      const useServer = size > LARGE_FILE_THRESHOLD
+        if (size > LARGE_FILE_THRESHOLD) {
+          setProcessingLocation("server")
 
-      if (useServer) {
-        await processOnServer(input, "beautify")
-      } else {
-        processOnClient(input, "beautify")
+          const apiUrl =
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+          const response = await fetch(`${apiUrl}/api/format`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rawJson: input, action: action }),
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.error || "Server processing failed")
+          }
+
+          setOutput(data.result)
+          setError(null)
+          setIsValid(true)
+          return true // Success
+        } else {
+          setProcessingLocation("client")
+          const parsed = JSON.parse(input)
+          const formatted =
+            action === "beautify"
+              ? JSON.stringify(parsed, null, 2)
+              : JSON.stringify(parsed)
+
+          setOutput(formatted)
+          setError(null)
+          setIsValid(true)
+          return true // Success
+        }
+      } catch (err: any) {
+        setOutput("")
+        setError(err.message || "Invalid JSON structure")
+        setIsValid(false)
+        return false // Failure
+      } finally {
+        // ALWAYS turn off the loading spinner when done
+        setIsProcessing(false)
       }
-      
-      setMode("beautify")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "JSON نامعتبر")
-      setIsValid(false)
-      setOutput("")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, processOnClient, processOnServer])
+    },
+    [input]
+  )
 
-  const minify = useCallback(async () => {
-    if (!input.trim()) {
-      setError("لطفاً JSON را وارد کنید")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      const size = new Blob([input]).size
-      const useServer = size > LARGE_FILE_THRESHOLD
-
-      if (useServer) {
-        await processOnServer(input, "minify")
-      } else {
-        processOnClient(input, "minify")
-      }
-      
-      setMode("minify")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "JSON نامعتبر")
-      setIsValid(false)
-      setOutput("")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, processOnClient, processOnServer])
+  const beautify = useCallback(() => processJson("beautify"), [processJson])
+  const minify = useCallback(() => processJson("minify"), [processJson])
 
   const clear = useCallback(() => {
     setInput("")
     setOutput("")
-    setError("")
+    setError(null)
     setIsValid(false)
+    setMode(null)
+    setProcessingLocation(null)
+    setIsProcessing(false)
   }, [])
-
-  const copyToClipboard = useCallback(async () => {
-    if (!output) return false
-    try {
-      await navigator.clipboard.writeText(output)
-      return true
-    } catch (err) {
-      return false
-    }
-  }, [output])
-
-  const download = useCallback(() => {
-    if (!output) return
-    const blob = new Blob([output], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = mode === "beautify" ? "formatted.json" : "minified.json"
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [output, mode])
 
   return {
     input,
@@ -150,13 +101,11 @@ export function useJsonFormatter() {
     output,
     error,
     isValid,
-    isLoading,
     mode,
     processingLocation,
+    isProcessing,
     beautify,
     minify,
     clear,
-    copyToClipboard,
-    download
   }
 }
