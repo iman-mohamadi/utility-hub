@@ -36,11 +36,10 @@ export function CopyPaste() {
       if (!codeToFetch.trim()) return
 
       setIsLoading(true)
-
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       try {
-        const response = await fetch(
-          `http://localhost:5000/api/pastes/${codeToFetch}`
-        )
+        const response = await fetch(`${apiUrl}/api/pastes/${codeToFetch}`)
         const data = await response.json()
 
         if (response.ok) {
