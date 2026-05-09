@@ -133,15 +133,25 @@
     }
 }
 
-* {
-    font-family: KalamehWebFaNum !important;
+/* Apply smooth scrolling to html */
+html {
     scroll-behavior: smooth;
+}
+
+/* Apply the custom font to the body so it inherits naturally, without !important */
+body {
+    font-family: 'KalamehWebFaNum', sans-serif;
+}
+
+/* Force elements with Tailwind's .font-mono class (and their children) to use a monospace font for English numbers/code */
+.font-mono,
+.font-mono *,
+pre,
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    direction: ltr; /* Ensures JSON aligns correctly from left to right */
 }
 
 [dir="rtl"] {
     text-align: right;
-}
-
-[dir="rtl"] .rtl-flip {
-    transform: scaleX(-1);
 }
