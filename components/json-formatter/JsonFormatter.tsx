@@ -1,10 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import * as monaco from "monaco-editor"
 import Editor, { useMonaco, loader } from "@monaco-editor/react"
-loader.config({ monaco })
 import { useTheme } from "next-themes"
 import {
   Sparkles,
@@ -26,6 +24,14 @@ import {
 export function JsonFormatter() {
   const { resolvedTheme } = useTheme()
   const [isCopied, setIsCopied] = useState(false)
+
+  // Dynamically load the local monaco-editor engine ONLY in the browser
+  // This bypasses the Next.js "window is not defined" SSR build error
+  useEffect(() => {
+    import("monaco-editor").then((monaco) => {
+      loader.config({ monaco })
+    })
+  }, [])
 
   const {
     input,
