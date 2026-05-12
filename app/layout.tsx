@@ -1,12 +1,10 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 
-const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "ابزارهای رایگان | مجموعه ابزارهای توسعه‌دهندگان",
