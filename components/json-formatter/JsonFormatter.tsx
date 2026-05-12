@@ -1,266 +1,77 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { Textarea } from "@/components/ui/textarea"
+import Editor, { useMonaco } from "@monaco-editor/react"
+import { useTheme } from "next-themes"
 import {
   Sparkles,
   Trash2,
   Copy,
   CheckCircle2,
-  XCircle,
   FileJson,
   Minimize2,
-  ChevronRight,
-  ChevronDown,
-  ListTree,
-  AlignLeft,
-  Loader2, // Added Loader2 for the spinner
+  Loader2,
+  Wand2,
+  AlertTriangle,
 } from "lucide-react"
 import { toast } from "sonner"
-import { useJsonFormatter } from "@/hooks/useJsonFormatter"
+import {
+  useJsonFormatter,
+  LARGE_FILE_THRESHOLD,
+} from "@/hooks/useJsonFormatter"
 
-const LARGE_FILE_THRESHOLD = 100 * 1024
-
-// --- Helper Functions ---
-const syntaxHighlight = (json: string) => {
-  if (!json) return ""
-  let formatted = json
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-  return formatted.replace(
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-    function (match) {
-      let cls = "text-[#098658] dark:text-[#b5cea8]" // Numbers
-      if (/^"/.test(match)) {
-        if (/:$/.test(match)) {
-          cls = "text-[#0451a5] dark:text-[#9cdcfe]" // Keys
-        } else {
-          cls = "text-[#a31515] dark:text-[#ce9178]" // Strings
-        }
-      } else if (/true|false/.test(match)) {
-        cls = "text-[#0000ff] dark:text-[#569cd6]" // Booleans
-      } else if (/null/.test(match)) {
-        cls = "text-[#0000ff] dark:text-[#569cd6]" // Null
-      }
-      return `<span class="${cls}">${match}</span>`
-    }
-  )
-}
-
-// --- Interactive JSON Tree Components ---
-const JsonNode = ({
-  keyName,
-  value,
-  isLast,
-  isRoot,
-}: {
-  keyName?: string
-  value: any
-  isLast: boolean
-  isRoot?: boolean
-}) => {
-  const [expanded, setExpanded] = useState(true)
-
-  const isArray = Array.isArray(value)
-  const isObject = value !== null && typeof value === "object" && !isArray
-  const isComplex = isArray || isObject
-
-  const renderPrimitive = () => {
-    if (value === null)
-      return <span className="text-[#0000ff] dark:text-[#569cd6]">null</span>
-    if (typeof value === "boolean")
-      return (
-        <span className="text-[#0000ff] dark:text-[#569cd6]">
-          {value ? "true" : "false"}
-        </span>
-      )
-    if (typeof value === "number")
-      return <span className="text-[#098658] dark:text-[#b5cea8]">{value}</span>
-    if (typeof value === "string") {
-      return (
-        <span className="break-words whitespace-pre-wrap text-[#a31515] dark:text-[#ce9178]">
-          "{value}"
-        </span>
-      )
-    }
-    return null
-  }
-
-  if (!isComplex) {
-    return (
-      <div className="py-[2px]">
-        {keyName && (
-          <span className="text-[#0451a5] dark:text-[#9cdcfe]">
-            "{keyName}"
-          </span>
-        )}
-        {keyName && <span className="mr-1 text-slate-500">:</span>}
-        {renderPrimitive()}
-        {!isLast && <span className="text-slate-500">,</span>}
-      </div>
-    )
-  }
-
-  const brackets = isArray ? ["[", "]"] : ["{", "}"]
-  const keys = Object.keys(value)
-  const isEmpty = keys.length === 0
-
-  return (
-    <div className="relative py-[2px]">
-      <div className="group flex items-start">
-        {!isEmpty && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="absolute top-[4px] -left-4 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-sm text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200"
-          >
-            {expanded ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </button>
-        )}
-
-        <div>
-          {keyName && (
-            <span className="text-[#0451a5] dark:text-[#9cdcfe]">
-              "{keyName}"
-            </span>
-          )}
-          {keyName && <span className="mr-1 text-slate-500">:</span>}
-          <span className="text-slate-600 dark:text-slate-400">
-            {brackets[0]}
-          </span>
-
-          {!expanded && !isEmpty && (
-            <span
-              onClick={() => setExpanded(true)}
-              className="mx-2 cursor-pointer rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-300 dark:bg-white/10 dark:text-zinc-400 dark:hover:bg-white/20"
-            >
-              {isArray ? `${keys.length} items` : `${keys.length} keys`}
-            </span>
-          )}
-
-          {!expanded && (
-            <span className="text-slate-600 dark:text-slate-400">
-              {brackets[1]}
-              {!isLast ? "," : ""}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {expanded && !isEmpty && (
-        <div className="ml-1.5 border-l border-slate-200 pl-4 hover:border-slate-300 dark:border-white/5 dark:hover:border-white/20">
-          {keys.map((key, index) => (
-            <JsonNode
-              key={key}
-              keyName={isArray ? undefined : key}
-              value={value[key as keyof typeof value]}
-              isLast={index === keys.length - 1}
-            />
-          ))}
-        </div>
-      )}
-      {expanded && !isEmpty && (
-        <div className="text-slate-600 dark:text-slate-400">
-          {brackets[1]}
-          {!isLast ? "," : ""}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InteractiveJsonViewer({ output }: { output: string }) {
-  try {
-    const parsed = JSON.parse(output)
-    return (
-      <div className="min-w-max pb-4 text-left font-mono text-[13px] leading-relaxed select-text">
-        <JsonNode value={parsed} isLast={true} isRoot={true} />
-      </div>
-    )
-  } catch (e) {
-    return <pre className="text-red-500">Error rendering tree</pre>
-  }
-}
-
-// --- Main Application Component ---
 export function JsonFormatter() {
+  const { resolvedTheme } = useTheme()
   const [isCopied, setIsCopied] = useState(false)
-  const [viewMode, setViewMode] = useState<"tree" | "raw">("tree")
 
   const {
     input,
     setInput,
-    output,
     error,
-    isValid,
-    mode,
-    processingLocation,
-    isProcessing, // Destructure isProcessing from the hook
+    isProcessing,
     beautify,
     minify,
+    attemptFix,
     clear,
   } = useJsonFormatter()
 
-  // Auto-switch to raw view if minified or if file is massive (performance protection)
-  useEffect(() => {
-    if (output && isValid) {
-      if (mode === "minify") setViewMode("raw")
-      else if (output.length > LARGE_FILE_THRESHOLD) setViewMode("raw")
-      else setViewMode("tree")
-    }
-  }, [mode, output, isValid])
-
   const handleProcess = async (actionMode: "beautify" | "minify") => {
-    if (!input.trim()) {
-      toast.error("کد JSON را وارد کنید", {
-        className:
-          "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
-      })
-      return
-    }
+    if (!input.trim()) return
 
-    // Await the hook and capture the boolean success state
     const isSuccess =
       actionMode === "beautify" ? await beautify() : await minify()
 
-    if (isSuccess !== false) {
-      // Assuming hook returns true/undefined on success
-      const isServer = new Blob([input]).size > LARGE_FILE_THRESHOLD
-      toast.success(`پردازش ${isServer ? "سرور" : "موفق"} انجام شد`, {
-        icon: isServer ? "☁️" : "✨",
+    if (isSuccess) {
+      const isLarge = new Blob([input]).size > LARGE_FILE_THRESHOLD
+      toast.success(`پردازش موفق`, {
+        icon: isLarge ? "☁️" : "✨",
         className:
           "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white",
       })
+    }
+  }
+
+  const handleFix = async () => {
+    const success = await attemptFix()
+    if (success) {
+      toast.success("خطاهای JSON برطرف شد!", {
+        icon: "🪄",
+        className:
+          "bg-emerald-50 dark:bg-zinc-900 border-emerald-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-400",
+      })
+      await beautify()
     } else {
-      toast.error("خطا در ساختار JSON", {
+      toast.error("ساختار JSON بسیار آسیب‌دیده است. نیاز به اصلاح دستی دارد.", {
         className:
           "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-600 dark:text-red-200",
       })
     }
   }
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (input.trim()) {
-        const size = new Blob([input]).size
-        if (size <= LARGE_FILE_THRESHOLD) {
-          beautify()
-        }
-      } else {
-        clear()
-      }
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [input, beautify, clear])
-
   const copyToClipboard = async () => {
-    if (!output) return
-    await navigator.clipboard.writeText(output)
+    if (!input) return
+    await navigator.clipboard.writeText(input)
     setIsCopied(true)
     toast.success("کپی شد", {
       className:
@@ -270,14 +81,10 @@ export function JsonFormatter() {
   }
 
   const statsData = (() => {
-    if (!output) return null
-    const inSize = new Blob([input]).size,
-      outSize = new Blob([output]).size
-    return {
-      size: (outSize / 1024).toFixed(2),
-      lines: output.split("\n").length,
-      comp: inSize ? Math.round((1 - outSize / inSize) * 100) : 0,
-    }
+    if (!input) return null
+    const lines = input.split("\n").length
+    const size = (new Blob([input]).size / 1024).toFixed(2)
+    return { size, lines }
   })()
 
   return (
@@ -285,199 +92,177 @@ export function JsonFormatter() {
       className="min-h-[calc(100vh-4rem)] bg-slate-50 py-8 text-slate-900 transition-colors duration-300 selection:bg-blue-500/30 dark:bg-[#000000] dark:text-zinc-300"
       dir="rtl"
     >
-      <div className="container mx-auto flex h-[calc(100vh-8rem)] max-w-[1400px] flex-col px-4">
-        {/* Minimal Header */}
-        <div className="mb-6 flex shrink-0 flex-col items-end justify-between gap-4 md:flex-row">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-white">
-              <FileJson className="h-5 w-5 text-blue-500" />
-              JSON Formatter
-            </h1>
-          </div>
+      <div className="container mx-auto flex h-[calc(100vh-8rem)] max-w-[1200px] flex-col px-4">
+        {/* Header & Main Controls */}
+        <div className="mb-6 flex shrink-0 flex-col items-center justify-between gap-4 md:flex-row">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-white">
+            <FileJson className="h-6 w-6 text-blue-500" />
+            JSON Formatter
+          </h1>
 
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/50 dark:shadow-none">
+          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/70 p-1.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/50">
             <button
               onClick={() => handleProcess("beautify")}
-              disabled={isProcessing}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+              disabled={isProcessing || !input}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
             >
               <Sparkles className="h-3.5 w-3.5" /> زیبا‌سازی
             </button>
             <button
               onClick={() => handleProcess("minify")}
-              disabled={isProcessing}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+              disabled={isProcessing || !input}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
             >
               <Minimize2 className="h-3.5 w-3.5" /> مینی‌فای
             </button>
-            <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-white/10"></div>
+
+            <div className="h-4 w-px bg-slate-200 dark:bg-white/10"></div>
+
             <button
               onClick={clear}
-              disabled={isProcessing}
-              className="rounded-md px-2 py-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+              className="rounded-lg px-2 py-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
             >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Editor Area */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0a0a0a] dark:shadow-none">
-          <div className="grid min-h-0 flex-1 divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0 lg:divide-x-reverse dark:divide-white/10">
-            {/* Input Pane */}
-            <div className="group relative flex min-h-0 flex-col">
-              <div
-                className="absolute top-3 right-4 z-10 flex items-center gap-2"
-                dir="ltr"
+        {/* Unified Single Box */}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-black/5 dark:border-white/10 dark:bg-[#0a0a0a] dark:ring-white/5">
+          {/* Loading Overlay */}
+          <AnimatePresence>
+            {isProcessing && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm dark:bg-[#050505]/60"
               >
-                <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
-                  Input
-                </span>
-                {input && (
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${isValid ? "bg-green-500" : "bg-red-500"}`}
-                  />
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Floating Copy Button */}
+          {input && (
+            <div className="absolute top-4 right-6 z-10" dir="ltr">
+              <button
+                onClick={copyToClipboard}
+                className="flex items-center justify-center rounded-md bg-white/80 p-2 text-slate-400 shadow-sm backdrop-blur-md transition-all hover:bg-white hover:text-slate-700 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                title="Copy to clipboard"
+              >
+                {isCopied ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
                 )}
-              </div>
-              <Textarea
-                placeholder='{\n  "status": "ready",\n  "message": "paste your json here"\n}'
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                className="h-full w-full flex-1 resize-none overflow-y-auto border-0 bg-transparent p-6 pt-10 text-left font-mono text-[13px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 focus-visible:ring-0 dark:text-zinc-300 dark:placeholder:text-zinc-800"
-                dir="ltr"
-                spellCheck={false}
-              />
+              </button>
             </div>
+          )}
 
-            {/* Output Pane */}
-            <div className="relative flex min-h-0 flex-col bg-slate-50 dark:bg-[#050505]">
-              {/* LOADING OVERLAY */}
-              <AnimatePresence>
-                {isProcessing && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-[#050505]/50"
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                      <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                        در حال پردازش...
-                      </span>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          {/* Editor Area */}
+          <div className="relative flex-1 overflow-hidden" dir="ltr">
+            {input ? (
+              <div className="h-full w-full pt-2">
+                <Editor
+                  height="100%"
+                  language="json"
+                  theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
+                  value={input}
+                  onChange={(val) => setInput(val || "")}
+                  options={{
+                    minimap: { enabled: false },
+                    wordWrap: "on",
+                    formatOnPaste: true,
+                    folding: true,
+                    lineNumbersMinChars: 3,
+                    fontSize: 13,
+                    fontFamily: "var(--font-mono)",
+                    scrollBeyondLastLine: false,
+                    padding: { top: 24, bottom: 24 }, // Extra top padding to clear the copy button
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="absolute inset-0 z-0">
+                {/* Empty State Textarea to allow easy pasting */}
+                <textarea
+                  placeholder='{\n  "status": "ready",\n  "message": "paste your json here"\n}'
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="absolute inset-0 h-full w-full resize-none border-0 bg-transparent p-6 font-mono text-[13px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-300 focus-visible:ring-0 dark:text-zinc-300 dark:placeholder:text-zinc-700"
+                  spellCheck={false}
+                />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <FileJson className="h-16 w-16 text-slate-200 dark:text-zinc-800" />
+                </div>
+              </div>
+            )}
+          </div>
 
-              <div
-                className="absolute top-3 right-4 z-10 flex w-[calc(100%-2rem)] items-center justify-between"
+          {/* Error Banner with Snippet Highlighting */}
+          <AnimatePresence>
+            {error && input && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute right-4 bottom-8 left-4 z-20 rounded-xl border border-amber-200 bg-amber-50/95 p-4 shadow-lg backdrop-blur-md dark:border-amber-500/20 dark:bg-amber-950/90"
                 dir="ltr"
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] tracking-widest text-slate-400 uppercase dark:text-zinc-600">
-                    Output
-                  </span>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 overflow-hidden">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-amber-900 dark:text-amber-400">
+                        Syntax Error Detected
+                      </h4>
 
-                  {/* View Toggles */}
-                  {isValid && output && (
-                    <div className="flex items-center rounded-md border border-slate-200 bg-white/50 p-0.5 dark:border-white/10 dark:bg-zinc-900/50">
-                      <button
-                        onClick={() => setViewMode("tree")}
-                        title="Interactive Tree"
-                        className={`rounded px-1.5 py-1 transition-colors ${viewMode === "tree" ? "bg-white text-blue-500 shadow-sm dark:bg-zinc-800 dark:text-blue-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"}`}
-                      >
-                        <ListTree className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setViewMode("raw")}
-                        title="Raw Text"
-                        className={`rounded px-1.5 py-1 transition-colors ${viewMode === "raw" ? "bg-white text-blue-500 shadow-sm dark:bg-zinc-800 dark:text-blue-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"}`}
-                      >
-                        <AlignLeft className="h-3.5 w-3.5" />
-                      </button>
+                      {error.snippet && (
+                        <div className="mt-2 truncate rounded-md bg-white/50 px-3 py-2 font-mono text-[11px] text-amber-800 dark:bg-black/30 dark:text-amber-200">
+                          <span className="mr-2 text-amber-500/50 select-none">
+                            {error.line}:
+                          </span>
+                          <span className="relative">
+                            {error.snippet}
+                            <span className="absolute -bottom-1 left-0 h-px w-full bg-red-400/50 decoration-wavy"></span>
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="mt-2 font-mono text-[10px] text-amber-700 dark:text-amber-500/70">
+                        {error.message}
+                      </p>
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                <div className="flex gap-1">
                   <button
-                    onClick={copyToClipboard}
-                    className="rounded bg-white p-1 text-slate-400 shadow-sm transition-colors hover:text-slate-700 dark:bg-transparent dark:text-zinc-600 dark:shadow-none dark:hover:text-zinc-300"
-                    title="Copy"
+                    onClick={handleFix}
+                    className="group relative flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-amber-600 hover:shadow-md dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30"
                   >
-                    {isCopied ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
+                    <Wand2 className="h-4 w-4" /> Auto-Fix
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                    </span>
                   </button>
                 </div>
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              <div
-                className="relative flex-1 overflow-x-auto overflow-y-auto p-6 pt-12"
-                dir="ltr"
-              >
-                <AnimatePresence mode="wait">
-                  {error ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 font-mono text-xs text-red-600 dark:border-red-500/10 dark:bg-red-500/5 dark:text-red-400"
-                    >
-                      <XCircle className="h-4 w-4 shrink-0" />
-                      <span className="whitespace-pre-wrap">{error}</span>
-                    </motion.div>
-                  ) : output ? (
-                    viewMode === "tree" ? (
-                      <InteractiveJsonViewer output={output} />
-                    ) : (
-                      <pre className="min-w-full text-left font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
-                        <code
-                          dangerouslySetInnerHTML={{
-                            __html: syntaxHighlight(output),
-                          }}
-                        />
-                      </pre>
-                    )
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-slate-200 dark:text-zinc-800">
-                      <FileJson className="h-12 w-12 stroke-[1]" />
-                    </div>
-                  )}
-                </AnimatePresence>
+          {/* Stats Footer */}
+          {statsData && !error && (
+            <div
+              className="flex h-8 shrink-0 items-center justify-between border-t border-slate-100 bg-white px-4 font-mono text-[10px] tracking-wider text-slate-400 uppercase dark:border-white/5 dark:bg-[#000000] dark:text-zinc-600"
+              dir="ltr"
+            >
+              <div className="flex items-center gap-4">
+                <span>{statsData.size} KB</span>
+                <span>Ln {statsData.lines}</span>
               </div>
-
-              {/* Minimal Status Bar */}
-              {statsData && output && !error && (
-                <div
-                  className="flex h-7 shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 font-mono text-[10px] tracking-wider text-slate-500 uppercase dark:border-white/5 dark:bg-[#000000] dark:text-zinc-600"
-                  dir="ltr"
-                >
-                  <div className="flex items-center gap-4">
-                    <span>{statsData.size} KB</span>
-                    <span>Ln {statsData.lines}</span>
-                    {statsData.comp !== 0 && (
-                      <span
-                        className={
-                          statsData.comp > 0
-                            ? "text-green-600 dark:text-green-500/70"
-                            : "text-yellow-600 dark:text-yellow-500/70"
-                        }
-                      >
-                        {statsData.comp > 0 ? "-" : "+"}
-                        {Math.abs(statsData.comp)}%
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    {processingLocation === "server" ? "Server" : "Client"}
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
