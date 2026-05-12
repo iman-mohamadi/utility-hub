@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import Editor, { useMonaco } from "@monaco-editor/react"
+import * as monaco from "monaco-editor"
+import Editor, { useMonaco, loader } from "@monaco-editor/react"
+loader.config({ monaco })
 import { useTheme } from "next-themes"
 import {
   Sparkles,

@@ -20,6 +20,9 @@ importers:
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.5)
+      monaco-editor:
+        specifier: ^0.55.1
+        version: 0.55.1
       motion:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
